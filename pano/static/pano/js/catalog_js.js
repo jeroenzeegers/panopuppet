@@ -21,6 +21,23 @@ function get_catalogue(t, e) {
         o.destroy();
         $(a).empty();
     }
+    var diff_div_add_rem = "#diff-div-add-rem";
+    var diff_div_change = "#diff-div-change";
+    var is_shown = $(diff_div_add_rem).is(':visible') || $(diff_div_change).is(':visible');
+
+    var type = $("#targets a.active").attr("id");
+    var node1 = $("#node-1");
+    var node1_hash = $("#certname-1-hash");
+    var node2 = $("#node-2");
+    var node2_hash = $("#certname-2-hash");
+    var certname_compare = $(node1).attr("certname");
+    var certname_compare_hash = node1_hash.val();
+    var certname_against = $(node2).attr("certname");
+    var certname_against_hash = node2_hash.val();
+    if (is_shown && type && certname_compare && certname_compare_hash && certname_against && certname_against_hash) {
+        get_compare_data(certname_compare, certname_compare_hash, certname_against, certname_against_hash, type);
+    }
+
     if ("edges" == r)$(a).DataTable({
         ajax: "/pano/api/catalogue/get/" + t + "?show=edges",
         columnDefs: [{title: "Source Type", targets: 0}, {title: "Source Title", targets: 1}, {
