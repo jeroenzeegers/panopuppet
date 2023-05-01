@@ -29,7 +29,7 @@ setup(
     description='PanoPuppet is a PuppetDB dashboard.',
     install_requires=[
         "arrow",
-        "Django==1.8.8",
+        "Django==2.2.28",
         "django-auth-ldap==1.2.7",
         "pytz",
         "pyyaml",
