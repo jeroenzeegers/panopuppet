@@ -10,7 +10,7 @@ sources:
 # PUPPET DB CERTS - ordering is important here
 # Also, the files must be readable by the http daemon user
     'PUPPETDB_CERTIFICATES':
-      - '/path/to/public_key.pem'
+      - '/path/to/certificate.pem'
       - '/path/to/private_key.pem'
 # This setting is the default
     'PUPPETDB_VERIFY_SSL': false
@@ -20,15 +20,15 @@ sources:
     'PUPPETMASTER_CLIENTBUCKET_SHOW': true
     'PUPPETMASTER_CLIENTBUCKET_HOST': 'https://puppetmaster.example.com:8140/'
     'PUPPETMASTER_CLIENTBUCKET_CERTIFICATES':
-      - '/path/to/public.key'
-      - '/path/to/private.key'
+      - '/path/to/certificate.pem'
+      - '/path/to/private_key.pem'
     'PUPPETMASTER_CLIENTBUCKET_VERIFY_SSL': '/path/to/ca.pem'
     # Fileserver configuration for the PuppetDB Production
     'PUPPETMASTER_FILESERVER_SHOW': true
     'PUPPETMASTER_FILESERVER_HOST': 'https://puppetmaster.example.com:8140/'
     'PUPPETMASTER_FILESERVER_CERTIFICATES':
-      - '/path/to/public.key'
-      - '/path/to/private.key'
+      - '/path/to/certificate.pem'
+      - '/path/to/private_key.pem'
     'PUPPETMASTER_FILESERVER_VERIFY_SSL': '/path/to/ca.pem'
     'PUPPET_RUN_INTERVAL': 30
 
@@ -41,6 +41,9 @@ sources:
 # Time to hold the cache for pages - specified in seconds
 CACHE_TIME: 60
 
+#SQLITE_DIR: Where to write the sqliteDB used by panopuppet
+SQLITE_DIR: '/var/www/panopuppet'
+
 # Authentication method - Available auth methods = ldap and basic
 AUTH_METHOD: 'basic'
 
@@ -49,6 +52,8 @@ AUTH_METHOD: 'basic'
 LDAP_SERVER: 'ldap://ldap.forumsys.com'
 LDAP_BIND_DN: 'cn=read-only-admin,dc=example,dc=com'
 LDAP_BIND_PW: 'password'
+# Active directory filter
+# LDAP_FILTER: '(&(objectclass=User)(sAMAccountName=%(user)s))'
 LDAP_USEARCH_PATH: 'dc=example,dc=com'
 LDAP_GSEARCH_PATH:
 LDAP_ALLOW_GRP:

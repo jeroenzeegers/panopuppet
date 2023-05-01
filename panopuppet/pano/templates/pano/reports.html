@@ -1,0 +1,285 @@
+{% extends "pano/base.html" %}
+
+{% load puppetdb_extras %}
+{% load common %}
+{% load static %}
+
+{% block head %}
+    <link href="{% static 'pano/css/c3.min.css' %}" rel="stylesheet" type="text/css">
+    <script src="{% static 'pano/js/c3.min.js' %}"></script>
+    <script src="{% static 'pano/js/d3.min.js' %}"></script>
+    <script src="{% static 'pano/js/bootbox.min.js' %}"></script>
+    <script>
+        $(document).ready(function () {
+            get_facts("{{ certname }}", "{{ node_facts }}");
+            get_reports();
+            $('#legend-tooltip').tooltip({
+                title: '' +
+                '<h4>Legend:</h4>' +
+                '<div style="text-align: left">' +
+                '<p><span class="glyphicon glyphicon-play" style="color: #428bca"></span> Unchanged</p>' +
+                '<p><span class="glyphicon glyphicon-pause" style="color: #5bc0de"></span> Noop</p>' +
+                '<p><span class="glyphicon glyphicon-forward" style="color: #5cb85c"></span> Changed</p>' +
+                '<p><span class="glyphicon glyphicon-stop" style="color: #d9534f"></span> Failed</p>' +
+                '</div>',
+                html: true,
+                placement: "top"
+            });
+        });
+        $(document).on({
+            ajaxStart: function () {
+                bootbox.dialog({
+                    title: "Loading...",
+                    message: "Fetching data from PuppetDB.",
+                    show: true,
+                    backdrop: false,
+                    closeButton: true,
+                    animate: false
+                });
+            },
+            ajaxStop: function () {
+                bootbox.hideAll()
+            }
+        });
+    </script>
+{% endblock %}
+
+{% block content %}
+    <script>
+        function get_reports(obj) {
+            var backgroundTask = $.Deferred();
+            var url = '/pano/api/reports/{{ certname }}';
+            if ($(obj).attr('href')) {
+                var params = $(obj).attr('href');
+                url = url + params;
+            }
+            $.get(url, function (json) {
+                var response = $(jQuery(json));
+                var reports = response[0]['reports_list'];
+                var report_data = '';
+                var num_reports = reports.length;
+                if (num_reports === 0) {
+                    report_data = '<tr><td colspan="2">No reports found for node {{ certname }}.</td></tr>';
+                }
+                else {
+                    reports.forEach(function (report) {
+                        report_data += '<tr>';
+                        report_data += '<td>';
+                        if (report['report_status'] == 'changed') {
+                            report_data += '<span class="glyphicon glyphicon-forward" style="color: #5cb85c"></span>';
+                        }
+                        else if (report['report_status'] == 'unchanged' && report['is_noop'] === false) {
+                            report_data += '<span class="glyphicon glyphicon-play" style="color: #428bca"></span>';
+                        }
+                        else if (report['report_status'] == 'unchanged' && report['is_noop'] === true) {
+                            report_data += '<span class="glyphicon glyphicon-pause" style="color: #5bc0de"></span>';
+                        }
+                        else if (report['report_status'] == 'failed') {
+                            report_data += '<span class="glyphicon glyphicon-stop" style="color: #d9534f"></span>';
+                        }
+                        report_data += '<a href="../../events/{{ certname }}' + '/' + report['hash'] + '"><strong>[A]</strong></a>';
+
+                        if (report['events_successes'] > 0 || report['events_noops'] > 0 || report['events_failures'] > 0 || report['events_skipped'] > 0) {
+                            report_data += '<a href="../../events/' + report['hash'] + '?report_timestamp=' + report['start_time'] + '">' + report['hash'] + '</a></td>';
+                        }
+                        else {
+                            report_data += report['hash'] + '</td>';
+                        }
+                        report_data += '<td>' + report['environment'] + '</td>';
+                        report_data += '<td>' + report['config_version'] + '</td>';
+                        report_data += '<td>' + report['start_time'] + '</td>';
+                        report_data += '<td>' + report['end_time'] + '</td>';
+                        report_data += '<td style="text-align: center"><p style="margin-bottom: 0" class="bg-success img-rounded"><strong>' + report['events_successes'] + '</strong></p></td>';
+                        report_data += '<td style="text-align: center"><p style="margin-bottom: 0" class="bg-info img-rounded"><strong>' + report['events_noops'] + '</strong></p></td>';
+                        report_data += '<td style="text-align: center"><p style="margin-bottom: 0" class="bg-danger img-rounded"><strong>' + report['events_failures'] + '</strong></p></td>';
+                        report_data += '<td style="text-align: center"><p style="margin-bottom: 0" class="bg-warning img-rounded"><strong>' + report['events_skipped'] + '</strong></p></td>';
+                        report_data += '</tr>';
+                    });
+                }
+                // Update pager buttons
+                var pager_buttons = '';
+                for (var i = 1; i <= response[0]['tot_pages']; i++) {
+                    if (response[0]['curr_page'] === i) {
+                        pager_buttons += '<li class="active"><a onclick="refresh_data(this); return false;" href="?page=' + i + '">' + i + '</a></li>';
+                    }
+                    else {
+                        pager_buttons += '<li><a onclick="get_reports(this); return false;" href="?page=' + i + '">' + i + '</a></li>';
+                    }
+                }
+                $('#footPager').html(pager_buttons);
+                // update table with the new json data to the table body
+                $("#reportstablebody").html(report_data);
+
+                // Update chart
+                var x_data = ['x'];
+                var c_changed = ['Changed'];
+                var c_unchanged = ['Unchanged'];
+                var c_failed = ['Failed'];
+                var c_noop = ['Noop'];
+
+                reports.forEach(function (report) {
+                    x_data.push(report['start_time'].split(' ')[1]);
+                    if (report['report_status'] == 'failed') {
+                        c_failed.push(report['run_duration']);
+                        c_changed.push('0');
+                        c_unchanged.push('0');
+                        c_noop.push('0');
+                    }
+                    else if (report['report_status'] == 'changed') {
+                        c_failed.push('0');
+                        c_changed.push(report['run_duration']);
+                        c_unchanged.push('0');
+                        c_noop.push('0');
+                    }
+                    else if (report['report_status'] == 'unchanged' && report['is_noop'] === false) {
+                        c_failed.push('0');
+                        c_changed.push('0');
+                        c_unchanged.push(report['run_duration']);
+                        c_noop.push('0');
+                    }
+                    else if (report['report_status'] == 'unchanged' && report['is_noop'] === true) {
+                        c_failed.push('0');
+                        c_changed.push('0');
+                        c_unchanged.push(0);
+                        c_noop.push(report['run_duration']);
+                    }
+                });
+                chart.load({
+                    columns: [
+                        x_data,
+                        c_changed,
+                        c_unchanged,
+                        c_failed,
+                        c_noop
+                    ],
+                    type: 'bar'
+                });
+            })
+                    .fail(function () {
+                        var data = '<tr><td colspan="9">Can not connect to PuppetDB.</td></tr>';
+                        $("reportstablebody").html(data);
+                    });
+            backgroundTask.resolve();
+            return backgroundTask;
+        }
+    </script>
+
+    <div class="row">
+        <div class="col-md-12">
+            <h3>Reports for {{ certname }}</h3>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-8">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h1 class="panel-title">
+                        Report Run Times
+                    </h1>
+                </div>
+                <div class="panel-body">
+                    <div id="time_graph"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h1 class="panel-title">
+                        Node Inventory
+                    </h1>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-condensed table-striped">
+                        <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Value</th>
+                        </tr>
+                        </thead>
+                        <tbody id="inventoryfactsbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <h1 class="panel-title">
+                        Reports <a href="#" id="legend-tooltip">
+                        <i class='glyphicon glyphicon-info-sign'></i>
+                    </a>
+                    </h1>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-condensed table-striped">
+                        <thead>
+                        <tr>
+                            <th>Hash</th>
+                            <th>Environment</th>
+                            <th>Configuration Version</th>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Success</th>
+                            <th>Noop</th>
+                            <th>Failure</th>
+                            <th>Skipped</th>
+                        </tr>
+                        </thead>
+                        <tbody id="reportstablebody">
+                        {# List Format: hashid(0), certname(1), environment(2), time start(3), time end(4), success(5), noop(6), failure(7), pending(8), report status(9), config-version(10) #}
+                        </tbody>
+                        <tfoot>
+                        <tr>
+                            <td colspan="9">
+                                <ul id="footPager" class="pagination pagination-sm" style="margin:0;">
+                                    <li><a onclick="get_reports(this).done(); return false;" href="?page="></a></li>
+                                </ul>
+                            </td>
+                        </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script id="js_class">
+        var chart = c3.generate({
+            size: {
+                height: 210
+            },
+            bindto: '#time_graph',
+            data: {
+                x: 'x',
+                columns: [],
+                type: 'bar',
+                groups: [
+                    ['Failed', 'Unchanged', 'Changed', 'Noop']
+                ],
+                colors: {
+                    Failed: '#d9534f',
+                    Unchanged: '#428bca',
+                    Changed: '#5cb85c',
+                    Noop: '#5bc0de'
+                }
+            },
+            bar: {
+                width: {
+                    ratio: 0.5 // this makes bar width 50% of length between ticks3
+                }
+            },
+            axis: {
+                x: {
+                    type: 'category',
+                    tick: {
+                        rotate: 75,
+                        multiline: false
+                    }
+                }
+            }
+        });
+    </script>
+{% endblock %}
